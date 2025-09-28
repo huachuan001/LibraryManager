@@ -1,0 +1,70 @@
+// ===========================================
+// Library Manager Gradle 构建配置文件
+// ===========================================
+
+// 应用插件
+plugins {
+    id 'java'           // Java插件，提供Java编译、测试等功能
+    id 'application'    // Application插件，提供可执行应用程序的构建功能
+    // id 'jacoco'         // JaCoCo插件，提供代码覆盖率报告功能
+}
+
+// 项目基本信息
+group = 'com.example'                    // 项目组织标识
+version = '0.0.1-SNAPSHOT'              // 项目版本号
+
+// Java版本配置
+java {
+    sourceCompatibility = '17'          // 源代码兼容Java 17
+}
+
+// 依赖仓库配置
+repositories {
+    mavenCentral()                      // 使用Maven中央仓库
+}
+
+// 项目依赖配置
+dependencies {
+    // Spring Boot Web Starter - 提供Web应用开发的基础功能
+    // 包含：Spring MVC, Tomcat, Jackson等
+    implementation 'org.springframework.boot:spring-boot-starter-web:3.1.5'
+    
+    // Spring Boot Thymeleaf Starter - 提供模板引擎支持
+    // 用于渲染HTML页面
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf:3.1.5'
+    
+    // Spring Boot Test Starter - 提供测试功能
+    // 包含：JUnit 5, Mockito, Spring Test等
+    testImplementation 'org.springframework.boot:spring-boot-starter-test:3.1.5'
+    
+    // TestNG - 测试框架
+    testImplementation 'org.testng:testng:7.8.0'
+    
+    // Mockito - 模拟对象框架
+    testImplementation 'org.mockito:mockito-core:5.5.0'
+    
+    // 未来可能需要的依赖（注释状态）
+    // implementation 'org.springframework.boot:spring-boot-starter-data-jpa:3.1.5'  // JPA数据访问
+    // implementation 'mysql:mysql-connector-java:8.0.33'                            // MySQL驱动
+    // implementation 'org.springframework.boot:spring-boot-starter-security:3.1.5'  // 安全框架
+    // implementation 'org.springframework.boot:spring-boot-starter-validation:3.1.5' // 数据验证
+}
+
+// 应用程序配置
+application {
+    // 指定主类，用于启动应用程序
+    mainClass = 'com.example.librarymanager.LibraryManagerApplication'
+}
+
+// 测试任务配置
+tasks.named('test') {
+    useJUnitPlatform()                  // 使用JUnit 5平台运行测试
+    // finalizedBy jacocoTestReport        // 测试完成后生成覆盖率报告
+}
+
+// TestNG测试任务配置
+task testNG(type: Test) {
+    useTestNG()
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+}

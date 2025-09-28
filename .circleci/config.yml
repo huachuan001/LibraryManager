@@ -1,0 +1,160 @@
+# ===========================================
+# Library Manager CircleCI 配置文件
+# ===========================================
+
+version: 2.1
+
+# 定义作业
+jobs:
+  # 构建和测试作业
+  build-and-test:
+    docker:
+      - image: openjdk:17-jdk-slim
+    working_directory: ~/project
+    
+    steps:
+      - checkout
+      
+      # 恢复Gradle缓存
+      - restore_cache:
+          keys:
+            - gradle-{{ checksum "build.gradle" }}
+            - gradle-
+      
+      # 构建项目
+      - run:
+          name: 构建项目
+          command: |
+            chmod +x ./gradlew
+            ./gradlew build --no-daemon
+      
+      # 保存Gradle缓存
+      - save_cache:
+          paths:
+            - ~/.gradle
+          key: gradle-{{ checksum "build.gradle" }}
+      
+      # 运行TestNG测试
+      - run:
+          name: 运行TestNG测试
+          command: |
+            ./gradlew testNG --no-daemon
+      
+      # 保存测试报告
+      - store_test_results:
+          path: build/test-results/testNG
+      
+      # 保存构建产物
+      - persist_to_workspace:
+          root: .
+          paths:
+            - build/
+            - .
+
+  # Docker构建和部署测试
+  docker-build-and-test:
+    docker:
+      - image: openjdk:17-jdk-slim
+    working_directory: ~/project
+    
+    steps:
+      - checkout
+      
+      # 从工作空间恢复构建产物
+      - attach_workspace:
+          at: .
+      
+      # 安装Docker
+      - setup_remote_docker:
+          version: 20.10.14
+      
+      # 构建Docker镜像
+      - run:
+          name: 构建Docker镜像
+          command: |
+            docker build -t library-manager:${CIRCLE_SHA1} .
+            docker tag library-manager:${CIRCLE_SHA1} library-manager:latest
+      
+      # 推送Docker镜像到Registry（可选）
+      - run:
+          name: 推送Docker镜像到Registry
+          command: |
+            # 检查是否配置了Registry凭据
+            if [ -n "$DOCKER_USERNAME" ] && [ -n "$DOCKER_PASSWORD" ]; then
+              echo "推送镜像到Docker Hub..."
+              echo $DOCKER_PASSWORD | docker login -u $DOCKER_USERNAME --password-stdin
+              docker tag library-manager:${CIRCLE_SHA1} huachuan001/test:${CIRCLE_SHA1}
+              docker tag library-manager:${CIRCLE_SHA1} huachuan001/test:latest
+              docker push huachuan001/test:${CIRCLE_SHA1}
+              docker push huachuan001/test:latest
+              echo "✅ 镜像推送成功到 huachuan001/test"
+            elif [ -n "$GITHUB_TOKEN" ] && [ -n "$GITHUB_USERNAME" ]; then
+              echo "推送镜像到GitHub Container Registry..."
+              echo $GITHUB_TOKEN | docker login ghcr.io -u $GITHUB_USERNAME --password-stdin
+              docker tag library-manager:${CIRCLE_SHA1} ghcr.io/$GITHUB_USERNAME/library-manager:${CIRCLE_SHA1}
+              docker tag library-manager:${CIRCLE_SHA1} ghcr.io/$GITHUB_USERNAME/library-manager:latest
+              docker push ghcr.io/$GITHUB_USERNAME/library-manager:${CIRCLE_SHA1}
+              docker push ghcr.io/$GITHUB_USERNAME/library-manager:latest
+              echo "✅ 镜像推送成功"
+            else
+              echo "⚠️  未配置Registry凭据，跳过镜像推送"
+              echo "请设置以下环境变量之一："
+              echo "  - DOCKER_USERNAME 和 DOCKER_PASSWORD (Docker Hub)"
+              echo "  - GITHUB_USERNAME 和 GITHUB_TOKEN (GitHub Container Registry)"
+            fi
+          when: on_success
+      
+      # 运行Docker容器进行部署测试
+      - run:
+          name: 部署测试
+          command: |
+            # 启动容器
+            docker run -d -p 8081:8081 --name library-manager-test library-manager:${CIRCLE_SHA1}
+            
+            # 等待应用启动
+            sleep 60
+            
+            # 健康检查
+            for i in {1..10}; do
+              if curl -f http://localhost:8081/api/hello; then
+                echo "✅ 应用启动成功"
+                break
+              else
+                echo "等待应用启动... ($i/10)"
+                sleep 15
+              fi
+            done
+            
+            # 运行集成测试
+            echo "运行集成测试..."
+            curl -f http://localhost:8081/api/hello
+            curl -f http://localhost:8081/
+            
+            # 清理容器
+            docker stop library-manager-test
+            docker rm library-manager-test
+
+# 定义工作流程
+workflows:
+  version: 2
+  build-test-deploy:
+    jobs:
+      # 在PR和main分支上运行构建和测试
+      - build-and-test:
+          filters:
+            branches:
+              only:
+                - main
+                - /feature\/.*/
+                - /bugfix\/.*/
+      
+      # 在PR和main分支上运行Docker构建和测试
+      - docker-build-and-test:
+          requires:
+            - build-and-test
+          filters:
+            branches:
+              only:
+                - main
+                - /feature\/.*/
+                - /bugfix\/.*/

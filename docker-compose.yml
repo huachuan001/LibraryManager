@@ -1,0 +1,80 @@
+# ===========================================
+# Library Manager Docker Compose 配置
+# ===========================================
+
+version: '3.8'
+
+services:
+  # Library Manager 应用服务
+  library-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: library-manager-app
+    ports:
+      - "8081:8081"
+    environment:
+      # 应用配置
+      - SPRING_PROFILES_ACTIVE=docker
+      - SERVER_PORT=8081
+      - SPRING_APPLICATION_NAME=library-manager
+      
+      # JVM配置
+      - JAVA_OPTS=-Xms512m -Xmx1024m -XX:+UseG1GC -XX:+UseContainerSupport
+      
+      # 时区配置
+      - TZ=Asia/Shanghai
+    volumes:
+      # 日志挂载（可选）
+      - ./logs:/app/logs
+    networks:
+      - library-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/api/hello"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # 未来可扩展的数据库服务（注释状态）
+  # mysql:
+  #   image: mysql:8.0
+  #   container_name: library-manager-mysql
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: rootpassword
+  #     MYSQL_DATABASE: library_manager
+  #     MYSQL_USER: library_user
+  #     MYSQL_PASSWORD: library_password
+  #   ports:
+  #     - "3306:3306"
+  #   volumes:
+  #     - mysql_data:/var/lib/mysql
+  #   networks:
+  #     - library-network
+  #   restart: unless-stopped
+
+  # 未来可扩展的Redis缓存服务（注释状态）
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: library-manager-redis
+  #   ports:
+  #     - "6379:6379"
+  #   volumes:
+  #     - redis_data:/data
+  #   networks:
+  #     - library-network
+  #   restart: unless-stopped
+
+# 网络配置
+networks:
+  library-network:
+    driver: bridge
+    name: library-manager-network
+
+# 数据卷配置（用于数据库持久化）
+volumes:
+  # mysql_data:
+  # redis_data:
+  logs:
+    driver: local
